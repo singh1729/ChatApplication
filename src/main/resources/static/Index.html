@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat Application</title>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/stompjs/lib/stomp.min.js"></script>
+</head>
+<body>
+<div id="chat-page">
+    <input type="text" id="name" placeholder="Enter your name"/>
+    <div id="messageArea"></div>
+    <form id="messageForm">
+        <input type="text" id="message" placeholder="Type a message..."/>
+        <button type="submit">Send</button>
+    </form>
+</div>
+
+<script type="text/javascript">
+    document.addEventListener('DOMContentLoaded', function () {
+        var stompClient = null;
+        var username = null;
+
+        function connect(event) {
+            username = document.querySelector('#name').value.trim();
+            if(username) {
+                var socket = new SockJS('/websocket');
+                stompClient = Stomp.over(socket);
+                stompClient.connect({}, onConnected, onError);
+            }
+            event.preventDefault();
+        }
+
+        function onConnected() {
+            stompClient.subscribe('/topic/public', onMessageReceived);
+            stompClient.send("/app/chat.addUser",
+                {},
+                JSON.stringify({sender: username, type: 'JOIN'})
+            );
+        }
+
+        function onError(error) {
+            console.log('Could not connect to WebSocket server. Please refresh this page to try again.', error);
+        }
+
+        function sendMessage(event) {
+            var messageContent = document.querySelector('#message').value.trim();
+            if(messageContent && stompClient) {
+                var chatMessage = {
+                    sender: username,
+                    content: messageContent,
+                    type: 'CHAT'
+                };
+                stompClient.send("/app/chat.sendMessage", {}, JSON.stringify(chatMessage));
+                document.querySelector('#message').value = '';
+            }
+            event.preventDefault();
+        }
+
+        function onMessageReceived(payload) {
+            var message = JSON.parse(payload.body);
+            var messageElement = document.createElement('li');
+
+            if(message.type === 'JOIN') {
+                messageElement.classList.add('event-message');
+                message.content = message.sender + ' joined!';
+            } else if (message.type === 'LEAVE') {
+                messageElement.classList.add('event-message');
+                message.content = message.sender + ' left!';
+            } else {
+                messageElement.classList.add('chat-message');
+
+                var avatarElement = document.createElement('i');
+                var avatarText = document.createTextNode(message.sender[0]);
+                avatarElement.appendChild(avatarText);
+
+                var usernameElement = document.createElement('span');
+                var usernameText = document.createTextNode(message.sender);
+                usernameElement.appendChild(usernameText);
+
+                messageElement.appendChild(avatarElement);
+                messageElement.appendChild(usernameElement);
+            }
+
+            var textElement = document.createElement('p');
+            var messageText = document.createTextNode(message.content);
+            textElement.appendChild(messageText);
+
+            messageElement.appendChild(textElement);
+
+            document.querySelector('#messageArea').appendChild(messageElement);
+            document.querySelector('#messageArea').scrollTop = document.querySelector('#messageArea').scrollHeight;
+        }
+
+        document.querySelector('#messageForm').addEventListener('submit', sendMessage, true);
+        document.querySelector('#name').addEventListener('blur', connect, true);
+    });
+</script>
+</body>
+</html>
